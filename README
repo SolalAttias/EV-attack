@@ -1,0 +1,8 @@
+README
+
+R3-12.47-3.glm
+
+I removed all warning messages, by reducing the power draw from nodes X Y and Z by a factor of 2.
+
+transformer_configuration:3123
+transformer_configuration:3121

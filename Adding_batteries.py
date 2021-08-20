@@ -3,9 +3,8 @@ import os
 import random
 import subprocess
 import time
-import math
+from math import cos,sin,pi
 
-#random.seed(42)
 
 RUN = False
 
@@ -24,21 +23,21 @@ BATTERY = """      use_internal_battery_model TRUE;
 
 
 INVERTER_SLOW = """     four_quadrant_control_mode LOAD_FOLLOWING;
-     rated_power 3000.0;		//Per phase rating
-     inverter_efficiency .95;
+	rated_power 3000.0;		//Per phase rating
+	inverter_efficiency .95;
 	charge_on_threshold 1.5 kW;
 	charge_off_threshold 1.7 kW;
 	discharge_off_threshold 2 kW;
 	discharge_on_threshold 3 kW;
-	max_discharge_rate 3 kW;
-	max_charge_rate 3 kW;
+	max_discharge_rate 6.7 kW;
+	max_charge_rate 6.7 kW;
 	charge_lockout_time 1;
 	discharge_lockout_time 1;
 """
 
 INVERTER_FAST = """     four_quadrant_control_mode LOAD_FOLLOWING;
-     rated_power 22000.0;		//Per phase rating
-     inverter_efficiency .95;
+	rated_power 22000.0;		//Per phase rating
+	inverter_efficiency .95;
 	charge_on_threshold 1.5 kW;
 	charge_off_threshold 1.7 kW;
 	discharge_off_threshold 2 kW;
@@ -50,49 +49,49 @@ INVERTER_FAST = """     four_quadrant_control_mode LOAD_FOLLOWING;
 """
 
 HACKED_INVERTER_FAST = """     four_quadrant_control_mode CONSTANT_PQ;
-     rated_power 22 kVA;
-     inverter_efficiency 0.9;
-     V_base 120;
-     charge_lockout_time 1;
-     discharge_lockout_time 1;
-     P_Out 22000;
-     Q_Out 0;
-     """
+	rated_power 22 kVA;
+	inverter_efficiency 0.9;
+	charge_lockout_time 1;
+	discharge_lockout_time 1;
+	P_Out 22000;
+	Q_Out 0;
+	"""
 
 HACKED_INVERTER_SLOW = """     four_quadrant_control_mode CONSTANT_PQ;
-     rated_power 3 kVA;
-     inverter_efficiency 0.9;
-     V_base 120;
-     charge_lockout_time 1;
-     discharge_lockout_time 1;
-     P_Out 3000;
-     Q_Out 0;
-     """
+	rated_power 6.7 kVA;
+	inverter_efficiency 0.9;
+	charge_lockout_time 1;
+	discharge_lockout_time 1;
+	P_Out 6700;
+	Q_Out 0;
+	"""
 
 n = 20
 HACKED_REACTIVE_INVERTER_FAST = """     four_quadrant_control_mode CONSTANT_PQ;
-     rated_power 22 kVA;
-     inverter_efficiency 0.9;
-     charge_lockout_time 1;
-     discharge_lockout_time 1;
-     P_Out """ + str(22000 * math.sin(3 * math.pi/n)) + """;
-     Q_Out """ + str(22000 * math.cos(3 * math.pi/n)) + """;
-     """
+	rated_power 22 kVA;
+	inverter_efficiency 0.9;
+	charge_lockout_time 1;
+	discharge_lockout_time 1;
+	P_Out """ + str(22000 * sin(3 * pi/n)) + """;
+	Q_Out """ + str(22000 * cos(3 * pi/n)) + """;
+	"""
 
 HACKED_REACTIVE_INVERTER_SLOW = """     four_quadrant_control_mode CONSTANT_PQ;
-     rated_power 3 kVA;
-     inverter_efficiency 0.9;
-     charge_lockout_time 1;
-     discharge_lockout_time 1;
-     P_Out """ + str(3000 * math.sin(3 * math.pi/n)) + """;
-     Q_Out """ + str(3000 * math.cos(3 * math.pi/n)) + """;
-     """
+	rated_power 6.7 kVA;
+	inverter_efficiency 0.9;
+	charge_lockout_time 1;
+	discharge_lockout_time 1;
+	P_Out """ + str(6700 * sin(3 * pi/n)) + """;
+	Q_Out """ + str(6700 * cos(3 * pi/n)) + """;
+	"""
 
-def add_batteries(content,INVERTER,BATTERY,households_with_EVs, EVs_with_V2G,prefix,hacked = False,is_load = False):
+def add_batteries(content,households_with_EVs, EVs_with_V2G,power,prefix = "batt_", hacked = False, P = 0, Q = 0,seed = False, is_load = False):
 	# We find all the lines in the file that correspond to residential houses
 	# and that also have a meter associated to it 
 	# (I will probably have to do something about the rest...)
 	# Also find the names of the houses and meters associated
+	if seed != False:
+		random.seed(seed)
 	content = content.copy()
 
 	houses = []
@@ -102,8 +101,6 @@ def add_batteries(content,INVERTER,BATTERY,households_with_EVs, EVs_with_V2G,pre
 
 	# We only use metered houses for simplicity's sake, but here we count all houses
 	all_houses_nb = 0 
-
-
 
 	for i in range(len(content)):
 		if "object triplex_node" in content[i]:
@@ -179,7 +176,25 @@ def add_batteries(content,INVERTER,BATTERY,households_with_EVs, EVs_with_V2G,pre
 				batt_inverter += "     inverter_type FOUR_QUADRANT;" + '\n'
 				batt_inverter += "     parent batt_meter_" + names[index] + ";" + '\n'
 				batt_inverter += "     sense_object " + meter_names[index] + ";" + '\n'
-				batt_inverter += INVERTER + '\n'
+				if hacked:
+					batt_inverter += "     four_quadrant_control_mode CONSTANT_PQ;" + '\n'
+				else:
+					batt_inverter += "     four_quadrant_control_mode LOAD_FOLLOWING;" + '\n'
+				batt_inverter += "     rated_power " + str(power) + ";" + '\n'
+
+				batt_inverter += "     inverter_efficiency 0.95;" + '\n'
+				batt_inverter += "     charge_lockout_time 1;" + '\n'
+				batt_inverter += "     discharge_lockout_time 1;" + '\n'
+				if hacked: 
+					batt_inverter += "     P_Out " + str(P) + ";" + '\n'
+					batt_inverter += "     P_Out " + str(Q) + ";" + '\n'
+				else:
+					batt_inverter += "     charge_on_threshold 1.5 kW;" + '\n'
+					batt_inverter += "     charge_off_threshold 1.7 kW;" + '\n'
+					batt_inverter += "     discharge_off_threshold 2 kW;" + '\n'
+					batt_inverter += "     discharge_on_threshold 3 kW;" + '\n'
+					batt_inverter += "     max_discharge_rate " + str(power)  + ";" + '\n'
+					batt_inverter += "     max_charge_rate " + str(power) + ";" + '\n'
 				batt_inverter += "}" + '\n'
 
 				# We add a battery, that represents our EV
@@ -199,191 +214,118 @@ def add_batteries(content,INVERTER,BATTERY,households_with_EVs, EVs_with_V2G,pre
 	return content
 
 
-
-
-
-def add_loads(content):
-	return 0
-"""
-files = [os.path.join("testcases/",f) for f in os.listdir("testcases/") if os.path.isfile(os.path.join("testcases/",f)) and f[-4:] == ".glm" and f[:2] != '._' and f[-8:-4] !="batt"]
-
-files.sort()"""
-"""
-for filename in files:
-	full_filename = filename
-	new_filename = filename[:-4] + "_batt.glm"
-	if not os.path.isfile(full_filename):
-		print(full_filename, 'File does not exist.')
-		quit()
-
-	with open(full_filename) as f:
-		content = f.read().splitlines()
-
-	new_content = add_batteries(content)
-	if new_content == 0:
-		continue
-
-
-	#print(filename,int(expected_EVs_added),EVs_added)
-	f = open(new_filename, "w")
-	for s in new_content:
-		f.write(s)
-		f.write('\n')
-
-	f.close()
-
-all_files = [os.path.join("testcases/",f) for f in os.listdir("testcases/") if os.path.isfile(os.path.join("testcases/",f)) and f[-4:] == ".glm" and f[:2] != '._']
-"""
-if RUN:
-	t1 = time.time()
-	for f in all_files:
-		subprocess.run(["/usr/local/bin/gridlabd",f])
-	t2 = time.time()
-	print(t2-t1)
-
-
 def read_file(filename):
-	full_filename = filename
-	if not os.path.isfile(full_filename):
-		print(full_filename, 'File does not exist.')
+	if not os.path.isfile(filename):
+		print(filename, 'File does not exist.')
 		quit()
 
-	with open(full_filename) as f:
+	with open(filename) as f:
 		content = f.read().splitlines()
 	return content
 
 
 
-def find_power_factor(filename,n):
+def find_power_factor(filename,n,seed = 42):
+	content = read_file(filename)
 	for alpha in range(n+1):
-		new_filename = "optimal_PF/scenario3_GFC_alpha_" + str(alpha) + "_" + filename
+		new_filename = "optimal_PF/scenario3_alpha_" + str(alpha) + "_" + filename
+		new_content = add_batteries(content,0.3, 0.2, 22000, prefix = "alpha_" + str(alpha) + "_batt_", hacked = True, P = 22000*cos((pi/2)*(alpha/n)), Q = 22000*sin((pi/2)*(alpha/n)),seed = seed)
+		write_file(new_content,new_filename)
 
 
-		new_content = add_batteries(content.copy(),HACKED_INVERTER_SLOW,str(alpha)+"batt_",hacked = True)
-		if new_content == 0:
-			print("what")
-
-
-		#print(filename,int(expected_EVs_added),EVs_added)
-		f = open(new_filename, "w")
-		for s in new_content:
+def write_file(content,filename):
+	if content == 0:
+		print(filename,"Error : content is empty")
+	else: 
+		f = open(filename, "w")
+		for s in content:
 			f.write(s)
 			f.write('\n')
-
 		f.close()
 
+scenario1(folder,new_folder,prefix):
+	files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder,f)) and f[-4:] == ".glm" and f[:2] != '._' and f[-8:-4] !="batt"]
+	files.sort()
 
-filename = "R3-12.47-3_fixed.glm"
-folder = "testcases/scenario3/"
-content = read_file(filename)
+	for filename in files:
+		full_filename = folder + filename
+		new_filename = new_folder + "2035_" + filename
+
+		content = read_file(full_filename)
+
+		seed1 = random.randint(1,1000000)
+		seed2 = random.randint(1,1000000)
+		seed3 = random.randint(1,1000000)
+
+		new_content = add_batteries(content,0.3, 0.2,6700,prefix = prefix + "2035_", hacked = False, seed = seed1)
+		new_filename = new_folder + "scenario2_2035_" + filename
+		write_file(new_content,new_filename)
+
+		new_content = add_batteries(content,0.6, 0.5,6700,prefix = prefix + "HP_", hacked = True, seed = seed2)
+		new_filename = new_folder + "scenario2_HP_" + filename
+		write_file(new_content,new_filename)
+
+		new_content = add_batteries(content,0.3, 0.2,22000,prefix = prefix + "GFC_", hacked = True, seed = seed3)
+		new_filename = new_folder + "scenario2_GFC_" + filename
+		write_file(new_content,new_filename)
+
+		new_content = add_batteries(content,0.3, 0.2,6700,prefix = prefix + "2035_hacked_", hacked = True, P = -6700, Q = -6000,seed = seed1)
+		new_filename = new_folder + "scenario2_2035_hacked_" + filename
+		write_file(new_content,new_filename)
+
+		new_content = add_batteries(content,0.6, 0.5,6700,prefix = prefix + "HP_hacked_", hacked = True, P = -6700, Q = -6000,seed = seed2)
+		new_filename = new_folder + "scenario2_HP_hacked_" + filename
+		write_file(new_content,new_filename)
+
+		new_content = add_batteries(content,0.3, 0.2,22000,prefix = prefix + "GFC_hacked_", hacked = True, P = -22000, Q = -19600,seed = seed3)
+		new_filename = new_folder + "scenario2_GFC_hacked_" + filename
+		write_file(new_content,new_filename)
+
+	new_files = [os.path.join(new_folder,f) for f in os.listdir(new_folder) if os.path.isfile(os.path.join(new_folder,f)) and f[-4:] == ".glm" and f[:2] != '._']
+
+#folder = "testcases/taxonomy_feeders/"
+#new_folder = "testcases/scenario1/"
+#prefix = "data/scenario1/scenario1"
+#scenario1(folder,new_folder,prefix)
+
+scenario2(folder,filename,prefix):
+
+	content = read_file(filename)
 
 
-prefix = "data/scenario3/"
+	new_content = add_batteries(content,0.3, 0.2,6700,prefix = prefix + "2035_", hacked = True, P = -3000, Q = -6000,seed = False, is_load = False)
+	new_filename = folder + "scenario2_2035_" + filename
+	write_file(new_content,new_filename)
 
-new_content = add_batteries(content,INVERTER_SLOW,BATTERY,0.4, 0.2,prefix+"2035",hacked = False,is_load = False)
-if new_content == 0:
-	print("what")
+	new_content = add_batteries(content,0.6, 0.5,6700,prefix = prefix + "HP_", hacked = True, P = -3000, Q = -6000,seed = False, is_load = False)
+	new_filename = folder + "scenario2_HP_" + filename
+	write_file(new_content,new_filename)
 
-new_filename = folder + "scenario3_2035" + filename
-f = open(new_filename, "w")
-for s in new_content:
-	f.write(s)
-	f.write('\n')
+	new_content = add_batteries(content,0.4, 0.2,22000,prefix = prefix + "GFC_", hacked = True, P = -10000, Q = -19600,seed = False, is_load = False)
+	new_filename = folder + "scenario2_GFC_" + filename
+	write_file(new_content,new_filename)
 
-f.close()
+#filename = "R3-12.47-3_fixed.glm"
+#folder = "testcases/scenario2/"
+#prefix = "data/scenario2/"
+#scenario2(folder,filename,prefix)
 
-new_content = add_batteries(content,INVERTER_FAST,BATTERY,0.4, 0.2,prefix+"GFC",hacked = False,is_load = False)
-if new_content == 0:
-	print("what")
+scenario3(folder,filename,prefix):
+	content = read_file(filename)
 
-new_filename = folder+"scenario3_GFC" + filename
-f = open(new_filename, "w")
-for s in new_content:
-	f.write(s)
-	f.write('\n')
+	new_content = add_batteries(content,0.3, 0.2,6700,prefix = prefix + "2035_", hacked = True, P = 3000, Q = 6000,seed = False, is_load = False)
+	new_filename = folder + "scenario3_2035_" + filename
+	write_file(new_content,new_filename)
 
-f.close()
+	new_content = add_batteries(content,0.6, 0.5,6700,prefix = prefix + "HP_", hacked = True, P = 3000, Q = 6000,seed = False, is_load = False)
+	new_filename = folder + "scenario3_HP_" + filename
+	write_file(new_content,new_filename)
 
-new_content = add_batteries(content,INVERTER_SLOW,BATTERY,0.8, 0.4,prefix+"HP",hacked = False,is_load = False)
-if new_content == 0:
-	print("what")
+	new_content = add_batteries(content,0.4, 0.2,22000,prefix = prefix + "GFC_", hacked = True, P = 10000, Q = 19600,seed = False, is_load = False)
+	new_filename = folder + "scenario3_GFC_" + filename
+	write_file(new_content,new_filename)
 
-new_filename = folder+"scenario3_HP" + filename
-f = open(new_filename, "w")
-for s in new_content:
-	f.write(s)
-	f.write('\n')
-
-f.close()
-
-new_content = add_batteries(content,HACKED_INVERTER_SLOW,BATTERY,0.4, 0.2,prefix+"hacked_2035",hacked = False,is_load = False)
-if new_content == 0:
-	print("what")
-
-new_filename = folder + "scenario3_hacked_2035" + filename
-f = open(new_filename, "w")
-for s in new_content:
-	f.write(s)
-	f.write('\n')
-
-f.close()
-
-new_content = add_batteries(content,HACKED_INVERTER_FAST,BATTERY,0.4, 0.2,prefix+"hacked_GFC",hacked = False,is_load = False)
-if new_content == 0:
-	print("what")
-
-new_filename = folder + "scenario3_hacked_GFC" + filename
-f = open(new_filename, "w")
-for s in new_content:
-	f.write(s)
-	f.write('\n')
-
-f.close()
-
-new_content = add_batteries(content,HACKED_INVERTER_SLOW,BATTERY,0.8, 0.4,prefix+"hacked_HP",hacked = False,is_load = False)
-if new_content == 0:
-	print("what")
-
-new_filename = folder + "scenario3_hacked_HP" + filename
-f = open(new_filename, "w")
-for s in new_content:
-	f.write(s)
-	f.write('\n')
-
-f.close()
-
-new_content = add_batteries(content,HACKED_REACTIVE_INVERTER_SLOW,BATTERY,0.4, 0.2,prefix+"hacked_reactive_2035",hacked = False,is_load = False)
-if new_content == 0:
-	print("what")
-
-new_filename = folder + "scenario3_hacked_reactive_2035" + filename
-f = open(new_filename, "w")
-for s in new_content:
-	f.write(s)
-	f.write('\n')
-
-f.close()
-
-new_content = add_batteries(content,HACKED_REACTIVE_INVERTER_FAST,BATTERY,0.4, 0.2,prefix+"hacked_reactive_GFC",hacked = False,is_load = False)
-if new_content == 0:
-	print("what")
-
-new_filename = folder + "scenario3_hacked_reactive_GFC" + filename
-f = open(new_filename, "w")
-for s in new_content:
-	f.write(s)
-	f.write('\n')
-
-f.close()
-
-new_content = add_batteries(content,HACKED_REACTIVE_INVERTER_SLOW,BATTERY,0.8, 0.4,prefix+"hacked_reactive_HP",hacked = False,is_load = False)
-if new_content == 0:
-	print("what")
-
-new_filename = folder + "scenario3_hacked_reactive_HP" + filename
-f = open(new_filename, "w")
-for s in new_content:
-	f.write(s)
-	f.write('\n')
-
-f.close()
+#filename = "R3-12.47-3_fixed.glm"
+#folder = "testcases/scenario3/"
+#prefix = "data/scenario3/"
+#scenario3(folder,filename,prefix)
